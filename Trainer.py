@@ -3,7 +3,9 @@
 import logging
 
 import torch
+import numpy as np
 from torch.optim import SGD, Adam
+from sklearn.linear_model import LinearRegression
 
 from DatasetLoader import DatasetLoader
 from Evaluator import Evaluator
@@ -11,15 +13,14 @@ from model import LSTM
 
 
 class Trainer:
-    def __init__(self, model_type: str, input_size: int, is_add_moving_average: bool,
-                 data_loader: DatasetLoader, learning_rate: float, evaluator: Evaluator, verbose_interval: int = 1,
+    def __init__(self, model_type: str, input_size: int, data_loader: DatasetLoader, learning_rate: float,
+                 evaluator: Evaluator, verbose_interval: int = 1,
                  patience_num: int = 10, max_iteration: int = 999,
                  evaluate_interval: int = 1):
         self.evaluator = evaluator
         self.evaluate_interval = evaluate_interval
         self.patience_num = patience_num
         self.verbose_interval = verbose_interval
-        self.is_add_moving_average = is_add_moving_average
         self.data_loader = data_loader
         self.max_iteration = max_iteration
 
@@ -29,23 +30,37 @@ class Trainer:
 
         # construct  the model to train
         self.model = None
+        self.is_neural_network = False
         if model_type == "lstm":
-            self.model = LSTM(32, input_size, device=self.device)
+            self.model = LSTM(120, input_size, device=self.device)
+            self.is_neural_network = True
+            self.model.to(self.device)
+            self.loss_func = torch.nn.MSELoss()
+            self.optimizer = Adam(self.model.parameters(), learning_rate)
+        elif model_type == "linear_regression":
+            self.model = LinearRegression(n_jobs=-1)
         else:
             raise ValueError("{} is an unknown model".format(model_type))
-        self.model.to(self.device)
-
-        self.loss_func = torch.nn.MSELoss()
-        self.optimizer = Adam(self.model.parameters(), learning_rate)
 
     def train(self):
         """
         Train with a fixed set of parameter
         :return:
         """
+        if self.is_neural_network:
+            self.train_neural_network()
+        else:  # normal linear model
+            train_data = np.copy(self.data_loader.train)
+            X = train_data[:, :-1, :]
+            y = train_data[:, -1, 0]
+            sample_num = X.shape[0]
+            X = X.reshape(sample_num, -1)
+            self.model.fit(X, y)
+            self.evaluator.final_evaluate(self.model, is_neural_model=False)
+
+    def train_neural_network(self):
         patience_counter = 0
         min_loss = float('inf')
-
         for i in range(self.max_iteration):
             iter_id = 0
             epoch_total_loss = 0
@@ -67,7 +82,7 @@ class Trainer:
                     logging.info("[Epoch{} Iteration{}] average_loss = {}".format(i, iter_id,
                                                                                   epoch_total_loss / iter_id))
 
-            if (i+1) % self.evaluate_interval == 0:
+            if (i + 1) % self.evaluate_interval == 0:
                 loss = self.evaluator.evaluate(self.model)
                 if loss < min_loss:
                     min_loss = loss
@@ -77,6 +92,5 @@ class Trainer:
                     patience_counter += 1
                 if patience_counter >= self.patience_num:
                     break  # early breaking
-
         self.evaluator.final_evaluate(self.model)
         logging.info("Training completes")

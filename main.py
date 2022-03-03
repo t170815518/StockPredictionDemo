@@ -12,9 +12,9 @@ from Trainer import Trainer
 from Evaluator import Evaluator
 
 parser = argparse.ArgumentParser(description='Meta-NER')
-parser.add_argument("--model", type=str, default="lstm")
-parser.add_argument("--window", type=int, default=50)
-parser.add_argument("--average_move", action="store_true")
+parser.add_argument("--model", type=str, default="lstm", choices=["lstm", "linear_regression"])
+parser.add_argument("--window", type=int, default=5)
+parser.add_argument("--average_size", type=int, default=0)
 parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
 parser.add_argument("--random_seed", type=int, default=1949)
 args = parser.parse_args()
@@ -38,10 +38,17 @@ rootLogger.addHandler(consoleHandler)
 # log the arguments
 logging.info(args)
 
-data = DatasetLoader(data_path="600519.csv", window_size=args.window)
+data = DatasetLoader(data_path="MT.csv", window_size=args.window, average_size=args.average_size)
 evaluator = Evaluator(data)
-trainer = Trainer(model_type=args.model.lower(), input_size=4, is_add_moving_average=args.average_move,
-                  data_loader=data, learning_rate=args.lr, evaluator=evaluator)
+
+if args.average_size <= 0:
+    feature_num = 4
+else:
+    feature_num = 8
+    logging.info("Moving average is used")
+
+trainer = Trainer(model_type=args.model.lower(), input_size=feature_num, data_loader=data, learning_rate=args.lr,
+                  evaluator=evaluator)
 
 # start training
 trainer.train()

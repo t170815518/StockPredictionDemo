@@ -25,10 +25,12 @@ class LSTM(torch.nn.Module):
 
         self.device = device
 
-        self.lstm_layer = nn.LSTM(input_size, hidden_size, batch_first=True, dropout=0.1, num_layers=1)
+        self.lstm_layer = nn.LSTM(input_size, hidden_size, batch_first=True, dropout=0, num_layers=1)
         self.linear1 = nn.Linear(hidden_size, hidden_size // 2, bias=True)
         self.relu = nn.Tanh()
-        self.linear2 = nn.Linear(hidden_size // 2, 1, bias=True)
+        self.linear2 = nn.Linear(hidden_size // 2, hidden_size // 4, bias=True)
+        self.relu2 = nn.Tanh()
+        self.linear3 = nn.Linear(hidden_size // 4, 1, bias=True)
 
     def forward(self, X):
         # convert numpy array to tensor
@@ -38,4 +40,6 @@ class LSTM(torch.nn.Module):
         y = self.linear1(out[:, -1, :])
         y = self.relu(y)
         y = self.linear2(y)
+        y = self.relu2(y)
+        y = self.linear3(y)
         return y
